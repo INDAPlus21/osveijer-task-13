@@ -29,7 +29,7 @@ fn main() {
     let mut data: [u8; 200 * 200 * 4] = [0; 200 * 200 * 4];
     for i in 0..200 {
         for j in 0..200 {
-            assign_pixel(i*200+j, (200/i*255) as u8, (200/i*255) as u8, 0, 255, &mut data)
+            assign_pixel(i*200+j, ((i as f32/200.0)*255.0) as u8, ((j as f32/200.0)*255.0) as u8, 0, 255, &mut data)
         }
     }
     writer.write_image_data(&data).unwrap();
