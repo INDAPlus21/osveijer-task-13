@@ -7,3 +7,4 @@ edition = "2018"
 
 [dependencies]
 png = "0.17.2"
+vecmath = "1.0.0"
