@@ -2,7 +2,7 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{BufWriter};
 use png;
-use vecmath::{self, Vector3, vec3_scale, vec3_add, vec3_sub, vec3_normalized};
+use vecmath::{self, Vector3, vec3_scale, vec3_add, vec3_sub, vec3_normalized, vec3_dot};
 
 #[derive(Copy,Clone)]
 struct Ray {
@@ -48,6 +48,29 @@ impl Camera {
     }
 }
 
+#[derive(Copy,Clone)]
+struct Sphere {
+    c: Vector3<f32>,
+    r: f32,
+    color: Vector3<u8>
+}
+
+impl Sphere {
+    pub fn new(_c: Vector3<f32>, _r: f32, _color: Vector3<u8>) -> Sphere {
+        Sphere { c: _c, r: _r , color: _color}
+    }
+
+    pub fn hit(self, ray: Ray) -> bool {
+        let oc = vec3_sub(ray.origin(), self.c);
+        let a = vec3_dot(ray.direction(), ray.direction());
+        let b = 2.0 * vec3_dot(oc,ray.direction());
+        let c = vec3_dot(oc,oc) - self.r * self.r;
+        let discriminant = b*b - 4.0*a*c;
+
+        return discriminant > 0.0;
+    }
+}
+
 fn main() {
     let path = Path::new(r"test.png");
     let file = File::create(path).unwrap();
@@ -55,6 +78,8 @@ fn main() {
 
     let width:usize = 200;
     let height: usize = 100;
+
+    let spheres = vec![Sphere::new([0.0,0.0,-2.0], 1.0, [0,255,0])];
 
     let mut encoder = png::Encoder::new(w, width as u32, height as u32); 
     encoder.set_color(png::ColorType::Rgba);
@@ -73,7 +98,8 @@ fn main() {
 
     let mut data: [u8; 200 * 100 * 4] = [0; 200 * 100 * 4];
     let rays = create_rays(Camera::new([0.0,0.0,0.0]), width, height);
-    set_background(rays, &mut data);
+    set_background(&rays, &mut data);
+    check_spheres(spheres,&rays,&mut data);
     //for i in 0..200 {
         //for j in 0..200 {
             //assign_pixel(i*200+j, ((i as f32/200.0)*255.0) as u8, ((j as f32/200.0)*255.0) as u8, 0, 255, &mut data)
@@ -98,11 +124,21 @@ fn create_rays(_camera: Camera, _w: usize, _h: usize) -> Vec<Ray>{
     rays
 }
 
-fn set_background(rays: Vec<Ray>, data: &mut [u8; 200 * 100 * 4]) {
+fn set_background(rays: &Vec<Ray>, data: &mut [u8; 200 * 100 * 4]) {
     for i in 0..(rays.len() - 1) {
         let t = 0.5 * (vec3_normalized(rays[i].direction())[1] + 1.0);
         let c = vec3_add(vec3_scale([255.0,255.0,255.0], 1.0-t),vec3_scale([75.0,150.0,255.0], t));
         assign_pixel(i, c[0] as u8, c[1] as u8, c[2] as u8, 255, data);
+    }
+}
+
+fn check_spheres(spheres: Vec<Sphere>, rays: &Vec<Ray>, data: &mut [u8; 200 * 100 * 4]) {
+    for i in spheres {
+        for j in 0..(rays.len() - 1) {
+            if i.hit(rays[j]) {
+                assign_pixel(j, i.color[0], i.color[1], i.color[2], 255, data);
+            }
+        }
     }
 }
 
