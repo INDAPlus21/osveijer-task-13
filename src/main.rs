@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufWriter};
 use rand::Rng;
 use png;
-use vecmath::{self, Vector3, vec3_scale, vec3_add, vec3_sub, vec3_normalized, vec3_dot, vec3_len};
+use vecmath::{self, Vector3, vec3_scale, vec3_add, vec3_sub, vec3_normalized, vec3_dot, vec3_len, vec3_mul};
 
 #[derive(Copy,Clone)]
 struct Ray {
@@ -34,7 +34,6 @@ struct Camera {
     tl: Vector3<f64>,
     tr: Vector3<f64>,
     bl: Vector3<f64>,
-    br: Vector3<f64>
 }
 
 impl Camera {
@@ -44,7 +43,6 @@ impl Camera {
             tl: vec3_add(_c, [-2.0,1.0,-1.0]), 
             tr: vec3_add(_c, [2.0,1.0,-1.0]), 
             bl: vec3_add(_c, [-2.0,-1.0,-1.0]), 
-            br: vec3_add(_c, [2.0,-1.0,-1.0]) 
         }
     }
 }
@@ -53,12 +51,12 @@ impl Camera {
 struct Sphere {
     c: Vector3<f64>,
     r: f64,
-    color: Vector3<u8>
+    mat: Material
 }
 
 impl Sphere {
-    pub fn new(_c: Vector3<f64>, _r: f64, _color: Vector3<u8>) -> Sphere {
-        Sphere { c: _c, r: _r , color: _color}
+    pub fn new(_c: Vector3<f64>, _r: f64, _mat: Material) -> Sphere {
+        Sphere { c: _c, r: _r , mat: _mat}
     }
 
     pub fn hit(self, ray: Ray, mint: f64, maxt: f64, rec: &mut HitRecord) -> bool {
@@ -74,6 +72,7 @@ impl Sphere {
                 rec.t = t1;
                 rec.p = ray.point_by_t(t1);
                 rec.normal = vec3_normalized(vec3_sub(rec.p, self.c));
+                rec.mat = self.mat;
                 return true;
             }
             let t2 = (-b + discriminant.sqrt()) / (2.0*a);
@@ -81,6 +80,7 @@ impl Sphere {
                 rec.t = t2;
                 rec.p = ray.point_by_t(t2);
                 rec.normal = vec3_normalized(vec3_sub(rec.p, self.c));
+                rec.mat = self.mat;
                 return true;
             }
         }
@@ -91,7 +91,8 @@ impl Sphere {
 struct HitRecord {
     t: f64,
     p: Vector3<f64>,
-    normal: Vector3<f64>
+    normal: Vector3<f64>,
+    mat: Material
 }
 
 impl HitRecord {
@@ -99,9 +100,54 @@ impl HitRecord {
         HitRecord {
             t: 0.0,
             p: [0.0,0.0,0.0],
-            normal: [0.0,0.0,0.0]
+            normal: [0.0,0.0,0.0],
+            mat: Material::standard()
         }
     }
+}
+
+#[derive(Clone,Copy)]
+struct Material {
+    albedo: Vector3<f64>,
+    t: MaterialType
+}
+
+impl Material {
+    pub fn standard() -> Material{
+        Material {
+            albedo: [0.0,0.0,0.0],
+            t: MaterialType::Lambertian
+        }
+    }
+
+    pub fn new(_albedo: Vector3<f64>, _t: MaterialType) -> Material {
+        Material {
+            albedo: _albedo,
+            t: _t
+        }
+    }
+
+    pub fn scatter(self, ray: Ray, rec: HitRecord, attenuation: &mut Vector3<f64>, scattered: &mut Ray) -> bool {
+        match self.t {
+            MaterialType::Lambertian => {
+                *scattered = Ray::new(rec.p, vec3_add(rec.normal, get_random_in_sphere()));
+                *attenuation = self.albedo;
+                true
+            },
+            MaterialType::Metal => {
+                let reflected = vec3_sub(ray.direction(),vec3_scale(rec.normal, vec3_dot(rec.normal,ray.direction())*2.0));
+                *scattered = Ray::new(rec.p, reflected);
+                *attenuation = self.albedo;
+                true
+            }
+        }
+    }
+}
+
+#[derive(Clone,Copy)]
+enum MaterialType {
+    Lambertian,
+    Metal
 }
 
 fn main() {
@@ -112,10 +158,14 @@ fn main() {
     let width:usize = 600;
     let height: usize = 300;
 
-    let spheres = vec![Sphere::new([0.0,0.0,-2.0], 1.0, [0,255,0]), Sphere::new([0.0,-800.0,-2.0], 799.0, [0,255,0])];
+    let spheres = vec![
+        Sphere::new([0.0,0.0,-2.0], 1.0, Material::new([0.3,0.8,0.3], MaterialType::Metal)),
+        Sphere::new([0.0,-800.0,-2.0], 799.0, Material::new([0.8,0.1,0.8], MaterialType::Lambertian)),
+        Sphere::new([2.0,1.0,-1.5], 1.0, Material::new([0.1,0.3,0.6], MaterialType::Lambertian))
+    ];
 
     let maxt = 1000.0;
-    let mint = 0.0001;
+    let mint = 0.001;
 
     let mut encoder = png::Encoder::new(w, width as u32, height as u32); 
     encoder.set_color(png::ColorType::Rgba);
@@ -133,13 +183,13 @@ fn main() {
     let mut writer = encoder.write_header().unwrap();
 
     let mut data: [u8; 600 * 300 * 4] = [0; 600 * 300 * 4];
-    let mut pixeles = create_rays(Camera::new([0.0,0.0,0.0]), width, height, maxt);
+    let mut pixeles = create_rays(Camera::new([0.0,0.0,0.0]), width, height);
     trace_all(spheres,&mut pixeles,&mut data, mint, maxt);
     
     writer.write_image_data(&data).unwrap();
 }
 
-fn create_rays(_camera: Camera, _w: usize, _h: usize, t: f64) -> Vec<[Ray;4]>{
+fn create_rays(_camera: Camera, _w: usize, _h: usize) -> Vec<[Ray;4]>{
     let mut rays: Vec<[Ray;4]> = Vec::new();
     let mut rng = rand::thread_rng();
 
@@ -170,7 +220,7 @@ fn trace_all(spheres: Vec<Sphere>, pixeles: &mut Vec<[Ray;4]>, data: &mut [u8; 6
     for i in 0..pixeles.len() {
         let mut pixel_colour: [f64; 3] = [0.0,0.0,0.0];
         for j in pixeles[i] {
-            pixel_colour = vec3_add(pixel_colour, trace(j, &spheres, mint, maxt));
+            pixel_colour = vec3_add(pixel_colour, trace(j, &spheres, mint, maxt, 0));
         }
         let mut pc  = vec3_scale(pixel_colour, 0.25);
         pc = [pc[0].sqrt(), pc[1].sqrt(),pc[2].sqrt()];
@@ -179,15 +229,21 @@ fn trace_all(spheres: Vec<Sphere>, pixeles: &mut Vec<[Ray;4]>, data: &mut [u8; 6
     }
 }
 
-fn trace(ray: Ray, spheres: &Vec<Sphere>, mint: f64, maxt: f64) -> Vector3<f64> {
+fn trace(ray: Ray, spheres: &Vec<Sphere>, mint: f64, maxt: f64, depth: u8) -> Vector3<f64> {
     let mut rec: HitRecord = HitRecord::new();
     if hits(ray, spheres, mint, maxt, &mut rec) {
-        let new_ray_dir = vec3_sub(vec3_add(vec3_add(rec.p, rec.normal), get_random_in_sphere()), rec.p);
-        return vec3_scale(trace(Ray::new(rec.p,new_ray_dir),spheres,mint,maxt), 0.5);
+        let mut scattered: Ray = Ray::new([0.0,0.0,0.0], [0.0,0.0,0.0]);
+        let mut attenuation: Vector3<f64> = [0.0,0.0,0.0];
+        if depth < 50 && rec.mat.scatter(ray,rec,&mut attenuation,&mut scattered) { 
+            return vec3_mul(trace(scattered,spheres,mint,maxt, depth + 1), attenuation);
+        }
+        else {
+            return [0.0,0.0,0.0];
+        }
     }
     else {
         let t = 0.5 * (vec3_normalized(ray.direction())[1] + 1.0);
-        return vec3_add(vec3_scale([1.0,1.0,1.0], 1.0-t),vec3_scale([0.3,0.5,1.0], t));
+        return vec3_add(vec3_scale([1.0,1.0,1.0], 1.0-t),vec3_scale([0.2,0.4,1.0], t));
     }
 }
 
@@ -202,6 +258,7 @@ fn hits(ray: Ray, spheres: &Vec<Sphere>, mint: f64, maxt: f64, rec: &mut HitReco
             rec.t = temp_rec.t;
             rec.p = temp_rec.p;
             rec.normal = temp_rec.normal;
+            rec.mat = temp_rec.mat;
         }
     }
     hit_anything
