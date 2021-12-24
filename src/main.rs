@@ -153,6 +153,7 @@ impl Plane {
     }
 }
 
+#[derive(Debug)]
 struct HitRecord {
     t: f64,
     p: Vector3<f64>,
@@ -173,7 +174,7 @@ impl HitRecord {
     }
 }
 
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,Debug)]
 struct Material {
     albedo: Vector3<f64>,
     fuzziness: f64,
@@ -253,9 +254,10 @@ impl Material {
             },
             MaterialType::Texture => {
                 *scattered = Ray::new(rec.p, vec3_add(rec.normal, get_random_in_sphere()));
+
                 let offset = vec3_sub(rec.p, rec.center);
-                let mut horizontal_vector: Vector3<f64>;
-                let mut vertical_vector: Vector3<f64>;
+                let horizontal_vector: Vector3<f64>;
+                let vertical_vector: Vector3<f64>;
                 let stdvecs = [[1.0,0.0,0.0],[-1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,-1.0,0.0],[0.0,0.0,1.0],[0.0,0.0,-1.0]];
                 if stdvecs.iter().any(|v| *v == rec.normal) {
                     let (hv, vv) = get_vecs(rec.normal);
@@ -293,7 +295,7 @@ impl Material {
     }
 }
 
-#[derive(Clone,Copy)]
+#[derive(Clone,Copy,Debug)]
 enum MaterialType {
     Lambertian,
     Metal,
@@ -462,6 +464,7 @@ fn hits(ray: Ray, spheres: &Vec<Sphere>, planes: &Vec<Plane>, mint: f64, maxt: f
             rec.p = temp_rec.p;
             rec.normal = temp_rec.normal;
             rec.mat = temp_rec.mat;
+            rec.center = temp_rec.center;
         }
     }
     hit_anything
