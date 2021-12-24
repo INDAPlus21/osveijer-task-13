@@ -94,12 +94,44 @@ struct Plane {
     normal: Vector3<f64>,
     holder: f64,
     center: Vector3<f64>,
-    mat: Material
+    mat: Material,
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    min_z: f64,
+    max_z: f64
 }
 
 impl Plane {
-    pub fn new(_point: Vector3<f64>, _normal: Vector3<f64>, _mat: Material) -> Plane {
-        Plane { normal: _normal, holder: vec3_dot(_point, _normal), center: _point, mat: _mat}
+    pub fn new(_point: Vector3<f64>, _normal: Vector3<f64>, _mat: Material, borders: Option<[f64; 6]>, maxt: f64) -> Plane {
+        match borders {
+            Some(b) => Plane { 
+                normal: _normal, 
+                holder: vec3_dot(_point, _normal), 
+                center: _point, 
+                mat: _mat,
+                min_x: b[0],
+                max_x: b[1],
+                min_y: b[2],
+                max_y: b[3],
+                min_z: b[4],
+                max_z: b[5]
+            },
+            None => Plane { 
+                normal: _normal, 
+                holder: vec3_dot(_point, _normal), 
+                center: _point, 
+                mat: _mat,
+                min_x: -maxt,
+                max_x: maxt,
+                min_y: -maxt,
+                max_y: maxt,
+                min_z: -maxt,
+                max_z: maxt
+            }
+        }
+        
     }
 
     pub fn hit(self, ray: Ray, mint: f64, maxt: f64, rec: &mut HitRecord) -> bool {
@@ -107,9 +139,10 @@ impl Plane {
 
         if denominator != 0.0 {
             let t = (self.holder - vec3_dot(self.normal, ray.origin())) / denominator;
-            if t < maxt && t > mint {
+            let p = ray.point_by_t(t);
+            if t < maxt && t > mint && p[0] > self.min_x && p[0] < self.max_x && p[1] > self.min_y && p[1] < self.max_y && p[2] > self.min_z && p[2] < self.max_z {
                 rec.t = t;
-                rec.p = ray.point_by_t(t);
+                rec.p = p;
                 rec.normal = vec3_normalized(self.normal);
                 rec.mat = self.mat;
                 rec.center = self.center;
@@ -181,17 +214,18 @@ impl Material {
     }
 
     pub fn new_t(_texture: &str, _scale: f64) -> Material {
-        let decoder = png::Decoder::new(File::open("brick.png").unwrap());
+        let decoder = png::Decoder::new(File::open(_texture).unwrap());
         let mut reader = decoder.read_info().unwrap();
 
         let mut buf = vec![0; reader.output_buffer_size()];
         
         let info = reader.next_frame(&mut buf).unwrap();
         let bytes = &buf[..info.buffer_size()];
-    
+
         let mut arr = [[0; 3]; 2500];
-        for i in (0..bytes.len()).step_by(3) {
-            arr[i/3] = [bytes[i],bytes[i+1],bytes[i+2]];
+        let step: usize = match bytes.len() {7500 => 3, _ => 4};
+        for i in (0..bytes.len()).step_by(step) {
+            arr[i/step] = [bytes[i],bytes[i+1],bytes[i+2]];
         }
 
         Material { 
@@ -220,11 +254,13 @@ impl Material {
             MaterialType::Texture => {
                 *scattered = Ray::new(rec.p, vec3_add(rec.normal, get_random_in_sphere()));
                 let offset = vec3_sub(rec.p, rec.center);
-                let horizontal_vector: Vector3<f64>;
-                let vertical_vector: Vector3<f64>;
-                if rec.normal == [0.0,1.0,0.0] {
-                    horizontal_vector = [1.0,0.0,0.0];
-                    vertical_vector = [0.0,0.0,1.0];
+                let mut horizontal_vector: Vector3<f64>;
+                let mut vertical_vector: Vector3<f64>;
+                let stdvecs = [[1.0,0.0,0.0],[-1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,-1.0,0.0],[0.0,0.0,1.0],[0.0,0.0,-1.0]];
+                if stdvecs.iter().any(|v| *v == rec.normal) {
+                    let (hv, vv) = get_vecs(rec.normal);
+                    horizontal_vector = hv;
+                    vertical_vector= vv;
                 }
                 else {
                     horizontal_vector = [1.0,0.0,-(rec.normal[0]/rec.normal[2])];
@@ -264,56 +300,16 @@ enum MaterialType {
     Texture
 }
 
-/*
 fn main() {
-    let path = Path::new(r"test.png");
-    let file = File::create(path).unwrap();
-    let ref mut w = BufWriter::new(file);
-
-    let width:usize = 100;
-    let height: usize = 100;
-
-    let mut encoder = png::Encoder::new(w, width as u32, height as u32); 
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    encoder.set_trns(vec!(0xFFu8, 0xFFu8, 0xFFu8, 0xFFu8));
-    encoder.set_source_gamma(png::ScaledFloat::from_scaled(45455)); 
-    encoder.set_source_gamma(png::ScaledFloat::new(1.0 / 2.2));     
-    let source_chromaticities = png::SourceChromaticities::new(     
-        (0.31270, 0.32900),
-        (0.64000, 0.33000),
-        (0.30000, 0.60000),
-        (0.15000, 0.06000)
-    );
-    encoder.set_source_chromaticities(source_chromaticities);
-    let mut writer = encoder.write_header().unwrap();
-
-    let decoder = png::Decoder::new(File::open("brick.png").unwrap());
-    let mut reader = decoder.read_info().unwrap();
-
-    let mut buf = vec![0; reader.output_buffer_size()];
-        
-    let info = reader.next_frame(&mut buf).unwrap();
-    let bytes = &buf[..info.buffer_size()];
-    let mut img: Vec<u8> = Vec::new();
-    for i in 0..bytes.len() {
-        img.push(bytes[i]);
-        if i % 3 == 2 {
-            img.push(255);
-        }
-    }
-    writer.write_image_data(&img).unwrap();
-}
-*/
-fn main() {
-    let path = Path::new(r"test.png");
+    let path = Path::new(r"troll_render.png");
     let file = File::create(path).unwrap();
     let ref mut w = BufWriter::new(file);
 
     let width:usize = 600;
     let height: usize = 300;
 
-    
+    /*
+    // test
     let spheres = vec![
         Sphere::new([0.0,0.0,-2.0], 1.0, Material::new_m([0.3,0.8,0.3], 0.2)),
         Sphere::new([2.0,-0.5,-1.5], 0.5, Material::new_l([0.1,0.3,0.6])),
@@ -324,6 +320,19 @@ fn main() {
     let planes = vec![
         Plane::new([0.0,-1.0,-2.0], [0.0,1.0,0.0], Material::new_l([0.8,0.1,0.8])),
         Plane::new([-15.0,0.0,-15.0], [15.0,0.0,10.0], Material::new_t("brick.png", 0.3))
+    ];
+    */
+
+    // troll
+    let spheres = vec![
+
+    ];
+
+    let planes = vec![
+        Plane::new([-25.0,0.0,0.0], [1.0,0.0,0.0], Material::new_t("brick.png", 0.5), Some([-1000.0, 1000.0, -25.0, 25.0, -50.0, 0.0]), 1000.0),
+        Plane::new([25.0,0.0,0.0], [-1.0,0.0,0.0], Material::new_t("brick.png", 0.5), Some([-1000.0, 1000.0, -25.0, 25.0, -50.0, 0.0]), 1000.0),
+        Plane::new([-25.0,25.0,-50.0], [0.0,0.0,1.0], Material::new_t("troll.png", 1.0), Some([-25.0,25.0,-25.0,25.0,-1000.0,1000.0]), 1000.0),
+        Plane::new([0.0,-25.0,0.0], [0.0,1.0,0.0], Material::new_m([1.0,0.2,0.8], 0.05), None, 1000.0)
     ];
 
     let maxt = 1000.0;
@@ -468,6 +477,19 @@ fn get_random_in_sphere() -> Vector3<f64> {
         vec = vec3_sub(vec3_scale([x,y,z], 2.0),[1.0,1.0,1.0]);
     }
     vec
+}
+
+fn get_vecs(normal: Vector3<f64>) -> (Vector3<f64>, Vector3<f64>) {
+    let empty = normal.iter().position(|c| *c != 0.0).unwrap();
+    let mut vecs: [Vector3<f64>; 2] = [[0.0,0.0,0.0]; 2];
+    let mut j: usize = 0;
+    for i in [0,2,1] {
+        if i != empty {
+            vecs[j][i] = 1.0;
+            j += 1;
+        }
+    }
+    (vecs[0],vecs[1])
 }
 
 fn assign_pixel(pixel: usize, r: u8, g: u8, b: u8, a: u8, data: &mut [u8; 600 * 300 * 4]) {

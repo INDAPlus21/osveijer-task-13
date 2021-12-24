@@ -4,4 +4,4 @@ Can render spheres and planes. Spheres can have metal and lambertian materials. 
 
 Renders into ```.png``` format. Texture files are 50x50  ```.png```s.
 
-```test.png``` contains the rendered result of the current code setup. Shapes can be added, removed or moved by modifying the ```spheres``` and ```planes``` variables in ```main()```.
+```troll_render.png``` contains the rendered result of the current code setup. Shapes can be added, removed or moved by modifying the ```spheres``` and ```planes``` variables in ```main()```.
