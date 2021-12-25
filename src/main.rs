@@ -335,8 +335,8 @@ fn main() {
 
     let planes = vec![
         Plane::new([-25.0,0.0,0.0], [1.0,0.0,0.0], Material::new_t("brick.png", 0.5), Some([-1000.0, 1000.0, -25.0, 25.0, -50.0, 0.0]), 1000.0),
-        Plane::new([25.0,25.0,0.0], [-1.0,0.0,0.0], Material::new_t("troll.png", 1.0), Some([-1000.0, 1000.0, -25.0, 25.0, -50.0, 0.0]), 1000.0),
-        Plane::new([-25.0,25.0,-50.0], [0.0,0.0,1.0], Material::new_m([1.0,1.0,1.0], 0.0), Some([-25.0,25.0,-25.0,25.0,-1000.0,1000.0]), 1000.0),
+        Plane::new([25.0,25.0,0.0], [-1.0,0.0,0.0], Material::new_t("troll.png", -1.0), Some([-1000.0, 1000.0, -25.0, 25.0, -50.0, 0.0]), 1000.0),
+        Plane::new([-25.0,25.0,-50.0], [0.0,0.0,1.0], Material::new_m([0.9,0.9,0.9], 0.01), Some([-25.0,25.0,-25.0,25.0,-1000.0,1000.0]), 1000.0),
         Plane::new([-25.0,25.0,0.0], [0.0,0.0,-1.0], Material::new_m([1.0,1.0,1.0], 0.0), Some([-25.0,25.0,-25.0,25.0,-1000.0,1000.0]), 1000.0),
         Plane::new([0.0,-25.0,0.0], [0.0,1.0,0.0], Material::new_l([1.0,0.2,0.8]), None, 1000.0)
     ];
@@ -360,7 +360,7 @@ fn main() {
     let mut writer = encoder.write_header().unwrap();
 
     let mut data: [u8; 600 * 300 * 4] = [0; 600 * 300 * 4];
-    let mut pixeles = create_rays(Camera::new([0.0,0.0,0.0]), width, height);
+    let mut pixeles = create_rays(Camera::new([0.0,-10.0,0.0]), width, height);
     trace_all(spheres, planes,&mut pixeles,&mut data, mint, maxt);
 
     
